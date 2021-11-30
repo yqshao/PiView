@@ -9,15 +9,23 @@
 import * as THREE from "https://cdn.skypack.dev/three@0.135.0";
 import { TrackballControls } from "https://cdn.skypack.dev/three@0.135.0/examples/jsm/controls/TrackballControls.js"
 
-var quality = 24  // subdivision for balls and bonds
-var scale   = 1.2 //
-var edge    = 0.1;
-var bondRadius = 0.15;
+var radii = {'vdW':
+             [1.2, 1.2, 1.4, 1.82, 1.53, 1.92, 1.7, 1.55, 1.52, 1.47, 1.54, 2.27, 1.73, 1.84, 2.1, 1.8, 1.8, 1.75, 1.88],
+             'covalent':
+             [0.2, 0.31, 0.28, 1.28, 0.96, 0.84, 0.76, 0.71, 0.66, 0.57, 0.58, 1.66, 1.41, 1.21, 1.11, 1.07, 1.05, 1.02, 1.06]};
+
+var jmol = ["#ff0000", "#ffffff", "#d9ffff", "#cc80ff", "#c2ff00", "#ffb5b5", "#909090", "#3050f8", "#ff0d0d", "#90e050", "#b3e3f5", "#ab5cf2", "#8aff00", "#bfa6a6", "#f0c8a0", "#ff8000", "#ffff30", "#1ff01f", "#80d1e3", "#8f40d4", "#3dff00", "#e6e6e6", "#bfc2c7"];
 var trans     = new THREE.MeshBasicMaterial({color: 0xffffff, side: THREE.DoubleSide, transparent: true, opacity: 0 });
 var black     = new THREE.MeshBasicMaterial({color: 0x000000, side: THREE.BackSide});
-var materials = {}
-var radi = [0.5, 0.24, 0.28, 0.364, 0.306, 0.384, 0.34, 0.31, 0.304, 0.294, 0.308, 0.454, 0.346, 0.368, 0.42, 0.36, 0.36, 0.35, 0.376, 0.55];
-var jmol = ["#ff0000", "#ffffff", "#d9ffff", "#cc80ff", "#c2ff00", "#ffb5b5", "#909090", "#3050f8", "#ff0d0d", "#90e050", "#b3e3f5", "#ab5cf2", "#8aff00", "#bfa6a6", "#f0c8a0", "#ff8000", "#ffff30", "#1ff01f", "#80d1e3", "#8f40d4", "#3dff00", "#e6e6e6", "#bfc2c7"];
+var materials = {};
+var zoom      = zoom      ?? 1;
+var margin    = margin    ?? 0.1;
+var quality   = quality   ?? 24;  // subdivision for balls and bonds
+var atomScale = atomScale ?? 0.24; //
+var edge      = edge      ?? 0.1;
+var bondRadi  = bondRadi  ?? 0.15;
+var radiusType= radiusType?? 'vdW';
+var radi = radii[radiusType];
 
 function get_mat(color){
   if (!materials[color]) {
@@ -38,14 +46,21 @@ function renderPiView (node) {
     canvas.style  = "border: 0.2em solid";
     canvas.width  = node.getAttribute('width') ?? 200;
     canvas.height = node.getAttribute('height')?? 200;
+    // load atoms first compute the default camera limits
+    const atomsDict = JSON.parse(node.getAttribute('atoms'));
+    var wlim = Math.max(...atomsDict.elems.map((e,i)=>{
+        return Math.abs(atomsDict.coord[i][0])+radi[e]*atomScale}))+edge+margin;
+    var hlim = Math.max(...atomsDict.elems.map((e,i)=>{
+        return Math.abs(atomsDict.coord[i][1])+radi[e]*atomScale}))+edge+margin;
+    wlim = Math.max(wlim, hlim/canvas.height*canvas.width)/zoom;
+    hlim = Math.max(hlim, wlim/canvas.width*canvas.height)/zoom;
     // three.js setup
-    const camera   = new THREE.OrthographicCamera(-2, 2, 2, -2, 1, 2000);
+    const camera   = new THREE.OrthographicCamera(-wlim, wlim, hlim, -hlim, 1, 2000);
     const renderer = new THREE.WebGLRenderer({canvas: canvas, antialias: true, alpha: true,});
     const scene    = new THREE.Scene();
     camera.position.z = 1000;
     // make atoms
-    const atomsStruct = JSON.parse(node.getAttribute('atoms'));
-    var tmp = makeAtoms(atomsStruct);
+    var tmp = makeAtoms(atomsDict);
     var atoms = tmp[0];
     var outline = tmp[1];
 
@@ -61,9 +76,9 @@ function renderPiView (node) {
         var bond_group = new THREE.Group();
         inter.forEach(
             (bond, idx)=>{
-                makeBond(atomsStruct.coord[bond[0]],
-                         atomsStruct.coord[bond[1]],
-                         Math.sqrt((radi[atomsStruct.elems[bond[0]]]*scale+edge)**2-bondRadius**2),
+                makeBond(atomsDict.coord[bond[0]],
+                         atomsDict.coord[bond[1]],
+                         Math.sqrt((radi[atomsDict.elems[bond[0]]]*atomScale+edge)**2-bondRadi**2),
                          bond[2], bond_group)})
         scene.add(bond_group)};
 
@@ -86,10 +101,10 @@ function renderPiView (node) {
         animate(renderer, scene, camera, controls)}}
 
 function makeAtom(elem, coord, group, out_group) {
-    const geo  = new THREE.SphereGeometry(radi[elem]*scale, quality, quality);
+    const geo  = new THREE.SphereGeometry(radi[elem]*atomScale, quality, quality);
     const mat  = get_mat(jmol[elem]);
     const ball = new THREE.Mesh(geo, mat);
-    const out_geo  = new THREE.SphereGeometry(radi[elem]*scale + edge, quality, quality);
+    const out_geo  = new THREE.SphereGeometry(radi[elem]*atomScale + edge, quality, quality);
     const out_mat  = get_mat(0x000000);
     const out_ball = new THREE.Mesh(out_geo, black);
     ball.position.set(...coord);
@@ -107,7 +122,7 @@ function makeBond(coord1, coord2, offset, color, group) {
     diff.addScaledVector(diff, -0.5-offset/distance)
     var HALF_PI = Math.PI * 0.5;
     var position = coord1.add(diff.divideScalar(2));
-    var geo = new THREE.CylinderGeometry(bondRadius, bondRadius, distance/2-offset, quality, 1, true);
+    var geo = new THREE.CylinderGeometry(bondRadi, bondRadi, distance/2-offset, quality, 1, true);
     var orientation = new THREE.Matrix4();
     var offsetRotation = new THREE.Matrix4();
     var offsetPosition = new THREE.Matrix4();
