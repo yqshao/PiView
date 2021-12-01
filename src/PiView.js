@@ -8,6 +8,7 @@
 // written by Yunqi Shao 2021-11-29
 import * as THREE from "https://cdn.skypack.dev/three@0.135.0";
 import { TrackballControls } from "https://cdn.skypack.dev/three@0.135.0/examples/jsm/controls/TrackballControls.js"
+import { RoomEnvironment } from "https://cdn.skypack.dev/three@0.135.0/examples/jsm/environments/RoomEnvironment.js"
 
 var radii = {'vdW':
              [1.2, 1.2, 1.4, 1.82, 1.53, 1.92, 1.7, 1.55, 1.52, 1.47, 1.54, 2.27, 1.73, 1.84, 2.1, 1.8, 1.8, 1.75, 1.88],
@@ -25,11 +26,16 @@ var atomScale = atomScale ?? 0.24; //
 var edge      = edge      ?? 0.1;
 var bondRadi  = bondRadi  ?? 0.15;
 var radiusType= radiusType?? 'vdW';
+var luxurious = luxurious ?? false;
 var radi = radii[radiusType];
+
+if (luxurious){edge=0.0};
 
 function get_mat(color){
   if (!materials[color]) {
-    materials[color] = new THREE.MeshBasicMaterial({color: color})
+      materials[color] = new THREE.MeshBasicMaterial({color: color});
+      if (luxurious) {
+          materials[color] = new THREE.MeshStandardMaterial({color: color, roughness: 0,metalness: 1})}
   };
   return materials[color]
 }
@@ -63,6 +69,11 @@ function renderPiView (node) {
     var tmp = makeAtoms(atomsDict);
     var atoms = tmp[0];
     var outline = tmp[1];
+
+    if (luxurious) {
+        var pmremGenerator = new THREE.PMREMGenerator( renderer );
+        var environment = pmremGenerator.fromScene( new RoomEnvironment(), 0.04 ).texture;
+        scene.environment = environment;}
 
     const props = JSON.parse(node.getAttribute('props'));
     if (props){
