@@ -79,6 +79,7 @@ function renderPiView (node) {
                 makeBond(atomsDict.coord[bond[0]],
                          atomsDict.coord[bond[1]],
                          Math.sqrt((radi[atomsDict.elems[bond[0]]]*atomScale+edge)**2-bondRadi**2),
+                         Math.sqrt((radi[atomsDict.elems[bond[1]]]*atomScale+edge)**2-bondRadi**2),
                          bond[2], bond_group)})
         scene.add(bond_group)};
 
@@ -112,17 +113,19 @@ function makeAtom(elem, coord, group, out_group) {
     group.add(ball);
     out_group.add(out_ball)}
 
-function makeBond(coord1, coord2, offset, color, group) {
+function makeBond(coord1, coord2, offset1, offset2, color, group) {
     var coord1 = new THREE.Vector3(...coord1);
     var coord2 = new THREE.Vector3(...coord2);
     var diff = new THREE.Vector3();
     diff.subVectors(coord2, coord1);
     var distance = diff.length();
-    coord1.addScaledVector(diff, offset/distance)
-    diff.addScaledVector(diff, -0.5-offset/distance)
+    coord1.addScaledVector(diff, offset1/distance)
+    diff.addScaledVector(diff, -offset2/distance-offset1/distance)
+    diff.addScaledVector(diff, -0.5)
+    distance=diff.length();
     var HALF_PI = Math.PI * 0.5;
     var position = coord1.add(diff.divideScalar(2));
-    var geo = new THREE.CylinderGeometry(bondRadi, bondRadi, distance/2-offset, quality, 1, true);
+    var geo = new THREE.CylinderGeometry(bondRadi, bondRadi, distance, quality, 1, true);
     var orientation = new THREE.Matrix4();
     var offsetRotation = new THREE.Matrix4();
     var offsetPosition = new THREE.Matrix4();
